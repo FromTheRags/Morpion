@@ -1,0 +1,37 @@
+# Build directories
+build/
+bin/
+obj/
+out/
+cmake-build-*/
+.cache/
+
+# Executables and compiled objects
+*.exe
+*.o
+*.obj
+*.res
+*.a
+*.lib
+*.dll
+*.so
+*.dylib
+
+# Code::Blocks & IDE files
+*.layout
+*.depend
+*.cbp.mak
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Inno Setup output
+Morpion_Setup/
+Output/
+setup.exe
+
+# OS generated files
+.DS_Store
+Thumbs.db
+ehthumbs.db
