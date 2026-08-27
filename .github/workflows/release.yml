@@ -86,9 +86,10 @@ jobs:
           cd dist && zip -r ../morpion-windows-x64.zip morpion-windows
 
       - name: Build Inno Setup Installer
-        uses: idleberg/inno-setup-action@v3
-        with:
-          filepath: innosetup/morpion script.iss
+        shell: pwsh
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          & $iscc 'innosetup/morpion script.iss'
 
       - name: Upload Windows Portable Zip
         uses: actions/upload-artifact@v4
