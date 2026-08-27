@@ -35,3 +35,4 @@ setup.exe
 .DS_Store
 Thumbs.db
 ehthumbs.db
+disasm*.txt
