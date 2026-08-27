@@ -1,14 +1,19 @@
-name: Build & Package
+name: Release
 
 on:
   push:
-    branches: [ "**" ]
-  pull_request:
-    branches: [ "**" ]
+    tags:
+      - 'v*'
+      - '-v*'
+      - '!*beta*'
+      - '!*-beta*'
+
+permissions:
+  contents: write
 
 jobs:
   build-linux:
-    name: Linux (Ubuntu)
+    name: Build Linux Package
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -34,14 +39,14 @@ jobs:
           cp LICENSE OFL.txt README.md dist/morpion-linux/
           cd dist && tar -czvf ../morpion-linux-x86_64.tar.gz morpion-linux
 
-      - name: Upload Linux Build Artifact
+      - name: Upload Linux Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: morpion-linux-x86_64
+          name: release-linux
           path: morpion-linux-x86_64.tar.gz
 
   build-windows:
-    name: Windows (MinGW-w64 & Inno Setup)
+    name: Build Windows Package & Installer
     runs-on: windows-latest
     steps:
       - name: Checkout repository
@@ -85,14 +90,48 @@ jobs:
         with:
           filepath: innosetup/morpion script.iss
 
-      - name: Upload Windows Portable Artifact
+      - name: Upload Windows Portable Zip
         uses: actions/upload-artifact@v4
         with:
-          name: morpion-windows-x64
+          name: release-windows-zip
           path: morpion-windows-x64.zip
 
-      - name: Upload Windows Installer Artifact
+      - name: Upload Windows Installer
         uses: actions/upload-artifact@v4
         with:
-          name: morpion-installer
+          name: release-windows-installer
           path: dist/morpion-setup-*.exe
+
+  publish-release:
+    name: Create GitHub Release
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Linux Package
+        uses: actions/download-artifact@v4
+        with:
+          name: release-linux
+          path: release-assets
+
+      - name: Download Windows Portable Zip
+        uses: actions/download-artifact@v4
+        with:
+          name: release-windows-zip
+          path: release-assets
+
+      - name: Download Windows Installer
+        uses: actions/download-artifact@v4
+        with:
+          name: release-windows-installer
+          path: release-assets
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false

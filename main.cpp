@@ -767,9 +767,6 @@ int main ( int argc, char* argv[] )
     // _exit(0) court-circuite TOUTE cette chaîne (pas de destructeurs, pas d'atexit, pas de
     // SDL_Quit()) et demande directement au noyau Windows de terminer le processus.
     //
-    // AUCUNE FUITE MÉMOIRE : le noyau Windows libère automatiquement et inconditionnellement
-    // tous les handles, mappings mémoire, allocations heap et ressources GDI du processus à sa
-    // terminaison — exactement comme si SDL_Quit() avait été appelé proprement.
     //
     // Sur Linux / macOS, SDL 1.2 fonctionne correctement en 64-bit : on fait un return normal.
 #if defined(_WIN32)
