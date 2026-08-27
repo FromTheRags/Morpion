@@ -4,11 +4,20 @@ project(morpion LANGUAGES CXX C)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Find SDL 1.2
-find_package(SDL REQUIRED)
+# Architecture detection (x64 vs x86) for Windows prebuilt libraries
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+    set(ARCH_DIR "x64")
+else()
+    set(ARCH_DIR "x86")
+endif()
 
-# Find SDL_ttf
-find_path(SDL_TTF_INCLUDE_DIR SDL_ttf.h
+set(SDL12_VENDOR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cmake/sdl12")
+
+# 1. Try finding system SDL 1.2
+find_package(SDL QUIET)
+
+# 2. Try finding system SDL_ttf
+find_path(SDL_TTF_INCLUDE_DIR NAMES SDL_ttf.h
     PATH_SUFFIXES SDL include/SDL include
     PATHS
         ${SDL_INCLUDE_DIR}
@@ -19,7 +28,7 @@ find_path(SDL_TTF_INCLUDE_DIR SDL_ttf.h
 )
 
 find_library(SDL_TTF_LIBRARY
-    NAMES SDL_ttf
+    NAMES SDL_ttf SDL_ttf-static
     PATH_SUFFIXES lib
     PATHS
         /usr/lib
@@ -27,6 +36,25 @@ find_library(SDL_TTF_LIBRARY
         /opt/homebrew/lib
         /opt/local/lib
 )
+
+# 3. Automatic fallback on Windows (CLion / Visual Studio / MinGW) using bundled cmake/sdl12
+if(WIN32)
+    if(NOT SDL_FOUND OR NOT SDL_INCLUDE_DIR OR NOT SDL_LIBRARY)
+        set(SDL_INCLUDE_DIR "${SDL12_VENDOR_DIR}/include/SDL" CACHE PATH "SDL Include Dir" FORCE)
+        find_library(SDL_LIBRARY_BUNDLED NAMES SDL PATHS "${SDL12_VENDOR_DIR}/lib/${ARCH_DIR}" NO_DEFAULT_PATH)
+        set(SDL_LIBRARY "${SDL_LIBRARY_BUNDLED}" CACHE FILEPATH "SDL Library" FORCE)
+        set(SDL_FOUND TRUE)
+    endif()
+
+    if(NOT SDL_TTF_INCLUDE_DIR)
+        set(SDL_TTF_INCLUDE_DIR "${SDL12_VENDOR_DIR}/include/SDL" CACHE PATH "SDL TTF Include Dir" FORCE)
+    endif()
+
+    if(NOT SDL_TTF_LIBRARY)
+        find_library(SDL_TTF_LIBRARY_BUNDLED NAMES SDL_ttf PATHS "${SDL12_VENDOR_DIR}/lib/${ARCH_DIR}" NO_DEFAULT_PATH)
+        set(SDL_TTF_LIBRARY "${SDL_TTF_LIBRARY_BUNDLED}" CACHE FILEPATH "SDL TTF Library" FORCE)
+    endif()
+endif()
 
 if(NOT SDL_TTF_INCLUDE_DIR OR NOT SDL_TTF_LIBRARY)
     find_package(PkgConfig QUIET)
@@ -37,6 +65,10 @@ if(NOT SDL_TTF_INCLUDE_DIR OR NOT SDL_TTF_LIBRARY)
             set(SDL_TTF_LIBRARY ${PKG_SDL_TTF_LIBRARIES})
         endif()
     endif()
+endif()
+
+if(NOT SDL_FOUND OR NOT SDL_LIBRARY)
+    message(FATAL_ERROR "SDL 1.2 library not found. Please install libsdl1.2-dev or equivalent.")
 endif()
 
 if(NOT SDL_TTF_LIBRARY)
@@ -69,34 +101,58 @@ target_link_libraries(morpion PRIVATE
     ${SDL_TTF_LIBRARY}
 )
 
-if(MINGW)
-    target_link_libraries(morpion PRIVATE mingw32 SDLmain)
-    target_link_options(morpion PRIVATE -mwindows)
+if(WIN32)
+    if(MSVC)
+        target_link_libraries(morpion PRIVATE legacy_stdio_definitions)
+    endif()
+    find_library(SDLMAIN_LIBRARY NAMES SDLmain PATHS "${SDL12_VENDOR_DIR}/lib/${ARCH_DIR}" ${SDL_INCLUDE_DIR}/../lib)
+    if(SDLMAIN_LIBRARY)
+        target_link_libraries(morpion PRIVATE ${SDLMAIN_LIBRARY})
+    endif()
+    if(MINGW)
+        target_link_libraries(morpion PRIVATE mingw32)
+        target_link_options(morpion PRIVATE -mwindows)
+    endif()
 endif()
 
-# Assets to copy to the output directory
-set(GAME_ASSETS
-    grille.bmp
-    nice.bmp
-    croix.bmp
-    rond.bmp
-    sdl_icone.bmp
-    PatrickHand-Regular.ttf
-    Graduate-Regular.ttf
-)
+# Copy entire assets directory to output directory
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/assets")
+    add_custom_command(
+        TARGET morpion POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+            "$<TARGET_FILE_DIR:morpion>/assets"
+        COMMENT "Copying assets directory to output"
+    )
 
-foreach(ASSET ${GAME_ASSETS})
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${ASSET}")
+    # Also copy asset files directly next to the binary for flat execution
+    file(GLOB ASSET_FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/*.*")
+    foreach(ASSET ${ASSET_FILES})
         add_custom_command(
             TARGET morpion POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${CMAKE_CURRENT_SOURCE_DIR}/${ASSET}"
-                "$<TARGET_FILE_DIR:morpion>/${ASSET}"
-            COMMENT "Copying ${ASSET} to output directory"
+                "${ASSET}"
+                "$<TARGET_FILE_DIR:morpion>/"
+            COMMENT "Copying ${ASSET}"
         )
-    endif()
-endforeach()
+    endforeach()
+endif()
+
+# On Windows, also copy bundled DLLs next to the executable
+if(WIN32 AND EXISTS "${SDL12_VENDOR_DIR}/lib/${ARCH_DIR}")
+    file(GLOB BUNDLED_DLLS "${SDL12_VENDOR_DIR}/lib/${ARCH_DIR}/*.dll")
+    foreach(DLL_FILE ${BUNDLED_DLLS})
+        add_custom_command(
+            TARGET morpion POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${DLL_FILE}"
+                "$<TARGET_FILE_DIR:morpion>/"
+            COMMENT "Copying runtime DLL ${DLL_FILE}"
+        )
+    endforeach()
+endif()
 
 # Install rules
 install(TARGETS morpion DESTINATION bin)
-install(FILES ${GAME_ASSETS} DESTINATION bin)
+install(DIRECTORY assets/ DESTINATION bin/assets)
+install(DIRECTORY assets/ DESTINATION bin)

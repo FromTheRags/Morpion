@@ -29,7 +29,8 @@ jobs:
         run: |
           mkdir -p dist/morpion-linux
           cp build/morpion dist/morpion-linux/
-          cp *.bmp *.ttf dist/morpion-linux/
+          cp -r assets dist/morpion-linux/
+          cp assets/*.bmp assets/*.ttf dist/morpion-linux/ || true
           cp LICENSE OFL.txt README.md dist/morpion-linux/
           cd dist && tar -czvf ../morpion-linux-x86_64.tar.gz morpion-linux
 
@@ -71,12 +72,10 @@ jobs:
         run: |
           mkdir -p dist/morpion-windows
           cp build/morpion.exe dist/morpion-windows/
-          cp *.bmp *.ttf dist/morpion-windows/
+          cp -r assets dist/morpion-windows/
+          cp assets/*.bmp assets/*.ttf dist/morpion-windows/ || true
           cp LICENSE OFL.txt README.md dist/morpion-windows/
-          cp /mingw64/bin/SDL.dll dist/morpion-windows/ || true
-          cp /mingw64/bin/SDL_ttf.dll dist/morpion-windows/ || true
-          cp /mingw64/bin/libfreetype-6.dll dist/morpion-windows/ || true
-          cp /mingw64/bin/zlib1.dll dist/morpion-windows/ || true
+          cp cmake/sdl12/lib/x64/*.dll dist/morpion-windows/ || true
           # Copy executable to repository root for Inno Setup compiler
           cp build/morpion.exe ./
           cd dist && zip -r ../morpion-windows-x64.zip morpion-windows
@@ -84,7 +83,7 @@ jobs:
       - name: Build Inno Setup Installer
         uses: jrsoftware/inno-setup-action@v1
         with:
-          filepath: morpion script.iss
+          filepath: innosetup/morpion script.iss
 
       - name: Upload Windows Portable Artifact
         uses: actions/upload-artifact@v4
