@@ -103,7 +103,10 @@ target_link_libraries(morpion PRIVATE
 
 if(WIN32)
     if(MSVC)
-        target_link_libraries(morpion PRIVATE legacy_stdio_definitions)
+        find_library(LEGACY_STDIO_LIB legacy_stdio_definitions)
+        if(LEGACY_STDIO_LIB)
+            target_link_libraries(morpion PRIVATE ${LEGACY_STDIO_LIB})
+        endif()
     endif()
     find_library(SDLMAIN_LIBRARY NAMES SDLmain PATHS "${SDL12_VENDOR_DIR}/lib/${ARCH_DIR}" ${SDL_INCLUDE_DIR}/../lib)
     if(SDLMAIN_LIBRARY)
@@ -115,32 +118,23 @@ if(WIN32)
     endif()
 endif()
 
-# Copy entire assets directory to output directory
+# Copy assets to output directory
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/assets")
     add_custom_command(
         TARGET morpion POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${CMAKE_CURRENT_SOURCE_DIR}/assets"
             "$<TARGET_FILE_DIR:morpion>/assets"
-        COMMENT "Copying assets directory to output"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+            "$<TARGET_FILE_DIR:morpion>"
+        COMMENT "Copying assets directory and files to output"
     )
-
-    # Also copy asset files directly next to the binary for flat execution
-    file(GLOB ASSET_FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/*.*")
-    foreach(ASSET ${ASSET_FILES})
-        add_custom_command(
-            TARGET morpion POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${ASSET}"
-                "$<TARGET_FILE_DIR:morpion>/"
-            COMMENT "Copying ${ASSET}"
-        )
-    endforeach()
 endif()
 
 # On Windows, also copy bundled DLLs next to the executable
 if(WIN32 AND EXISTS "${SDL12_VENDOR_DIR}/lib/${ARCH_DIR}")
-    file(GLOB BUNDLED_DLLS "${SDL12_VENDOR_DIR}/lib/${ARCH_DIR}/*.dll")
+    file(GLOB BUNDLED_DLLS CONFIGURE_DEPENDS "${SDL12_VENDOR_DIR}/lib/${ARCH_DIR}/*.dll")
     foreach(DLL_FILE ${BUNDLED_DLLS})
         add_custom_command(
             TARGET morpion POST_BUILD

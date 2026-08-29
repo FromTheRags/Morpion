@@ -1,12 +1,13 @@
-# Morpion (Tic-Tac-Toe) - SDL 1.2 C++ Game
+# Morpion (Tic-Tac-Toe) - SDL 1.2 C/C++ Game
 
-[![Build & Package](https://github.com/FromTheRags/morpion/actions/workflows/build.yml/badge.svg)](https://github.com/FromTheRags/morpion/actions/workflows/build.yml)
-[![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPL%203.0-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![C++17](https://img.shields.io/badge/Language-C%2B%2B17-blue.svg)](https://isocpp.org/)
-[![SDL](https://img.shields.io/badge/Library-SDL%201.2-green.svg)](https://www.libsdl.org/)
+[![Build & Package](https://github.com/FromTheRags/Morpion/actions/workflows/build.yml/badge.svg)](https://github.com/FromTheRags/Morpion/actions/workflows/build.yml)
+[![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![Language: C++](https://img.shields.io/badge/Language-C%2B%2B-blue.svg)](https://isocpp.org/)
+[![Library: SDL 1.2](https://img.shields.io/badge/Library-SDL%201.2-green.svg)](https://www.libsdl.org/)
+[![CMake](https://img.shields.io/badge/Build-CMake-064F8C.svg?logo=cmake&logoColor=white)](https://cmake.org/)
 
-A nostalgic French **Tic-Tac-Toe (Morpion)** game built in **2013** by **FromTheRags** as a junior personal programming project using C++, Code::Blocks, SDL 1.2, and SDL_ttf.
-Of course as the writer was yet learning at that time the code is very simple and annotated in french.
+A nostalgic French **Tic-Tac-Toe (Morpion)** game built in **2013** as a junior personal programming project using C/C++, Code::Blocks, SDL 1.2, and SDL_ttf.
+Of course as I was yet learning at that time the code is very simple and annotated in french.
 I voluntary keep the code as it, without upgrading it, except for the need upgrade for builchain.
 
 This repository is preserved and open-sourced under the **GNU General Public License v3.0 (GPLv3)** for historical, educational, and nostalgic purposes, updated with modern cross-platform CMake builds, Inno Setup packaging, CI/CD automation, and original aesthetic assets.
@@ -43,46 +44,141 @@ All game images have been custom-crafted in a cohesive Japanese studio aesthetic
 
 ---
 
-## 🚀 Building in CLion (JetBrains IDE)
+## 🐧 Building on Linux
 
-[CLion](https://www.jetbrains.com/clion/) supports CMake natively. Because official Windows development libraries are bundled in `cmake/sdl12/`, **no external package manager is required on Windows!**
+### 1. Install Dependencies
 
-### Option A: CLion with Visual Studio Toolchain (Windows)
+Install CMake, a C++ compiler, and the SDL 1.2 development libraries:
+
+- **Ubuntu / Debian / Linux Mint**:
+  ```bash
+  sudo apt-get update
+  sudo apt-get install -y build-essential cmake libsdl1.2-dev libsdl-ttf2.0-dev
+  ```
+- **Fedora / RHEL**:
+  ```bash
+  sudo dnf install -y gcc-c++ cmake SDL-devel SDL_ttf-devel
+  ```
+- **Arch Linux / Manjaro**:
+  ```bash
+  sudo pacman -S base-devel cmake sdl12-compat sdl_ttf
+  ```
+
+### Option A: Building from Terminal
+
+```bash
+# Configure
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+# Build
+cmake --build build
+
+# Run!
+./build/morpion
+```
+
+### Option B: Building in CLion (JetBrains IDE)
 
 1. Open CLion &rarr; **File &rarr; Open** &rarr; Select the `Morpion` folder.
-2. In CLion, open **Settings (Ctrl+Alt+S) &rarr; Build, Execution, Deployment &rarr; Toolchains**:
-   - Add or select the **Visual Studio** toolchain (pointing to your Visual Studio 2022 installation).
-3. In **Settings &rarr; Build, Execution, Deployment &rarr; CMake**:
-   - Ensure the architecture is set to **x64** (or default).
-4. Click the **Reload CMake Project** button if needed.
-5. Click the green **Run ▶ (`morpion`)** button to build and launch the game!
+2. CLion detects `CMakeLists.txt` automatically.
+3. Click the green **Run ▶ (`morpion`)** button to build and launch the game.
 
 ---
 
-### Option B: CLion with WSL (Linux Subsystem on Windows)
+## 🍏 Building on macOS
 
-1. In your WSL terminal (Ubuntu / Debian):
-   ```bash
-   sudo apt-get update
-   sudo apt-get install -y build-essential cmake libsdl1.2-dev libsdl-ttf2.0-dev
-   ```
-2. In CLion: **Settings &rarr; Build, Execution, Deployment &rarr; Toolchains** &rarr; Add **WSL** (set as default).
-3. Click **Run ▶ (`morpion`)**.
+### 1. Install Dependencies
+
+Install CMake and SDL 1.2 development libraries using [Homebrew](https://brew.sh/):
+
+```bash
+brew install cmake sdl sdl_ttf
+```
+
+### Option A: Building from Terminal
+
+```bash
+# Configure
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+# Build
+cmake --build build
+
+# Run!
+./build/morpion
+```
+
+### Option B: Building in CLion (JetBrains IDE)
+
+1. Open CLion &rarr; **File &rarr; Open** &rarr; Select the `Morpion` folder.
+2. CLion detects CMake and the Homebrew toolchain automatically.
+3. Click the green **Run ▶ (`morpion`)** button to build and launch the game.
 
 ---
 
-### Option C: CLion on Linux or macOS
+## 🪟 Building on Windows
 
-1. Install dependencies:
-   - **Ubuntu/Debian**: `sudo apt install -y build-essential cmake libsdl1.2-dev libsdl-ttf2.0-dev`
-   - **macOS**: `brew install cmake sdl sdl_ttf`
-2. Open the `Morpion` folder in CLion and click **Run ▶**.
+### 🛠️ Windows Prerequisites (CMake & C++ Compilers)
+
+Before building from the **Terminal** or with **CLion**, ensure that you have **CMake** and a **C++ Compiler Toolchain** (Visual Studio MSVC or MinGW-w64) installed.
+
+> [!NOTE]
+> Official Windows development headers and libraries for SDL 1.2 and SDL_ttf are bundled in `cmake/sdl12/`. **No external SDL package manager or manual SDL library download is required on Windows!**
+
+#### 1. Install CMake
+
+CMake configures and generates native build files for your compiler of choice (Visual Studio, Ninja, MinGW Makefiles, etc.).
+
+- **Direct Download (Recommended)**:
+  1. Download the latest Windows x64 Installer (`.msi` or `.exe`) from [cmake.org/download](https://cmake.org/download/).
+  2. Run the installer and select **"Add CMake to the system PATH for all users"** (or for the current user).
+- **Via Windows Package Manager (Winget)**:
+  ```powershell
+  winget install --id Kitware.CMake
+  ```
+- **Verify installation**:
+  ```powershell
+  cmake --version
+  ```
+
+#### 2. Install a C++ Compiler (Visual Studio or MinGW-w64)
+
+Choose one of the two main C++ toolchains for Windows:
+
+##### Option A: Visual Studio 2022 / MSVC (*Recommended*)
+1. Download **Visual Studio 2022 Community** (Free) or **Build Tools for Visual Studio 2022** from [visualstudio.microsoft.com/downloads](https://visualstudio.microsoft.com/downloads/).
+   - Or install via `winget`:
+     ```powershell
+     winget install Microsoft.VisualStudio.2022.Community --override "--add Microsoft.VisualStudio.Workload.NativeDesktop --includeRecommended"
+     ```
+2. In the Visual Studio Installer, select the workload **Desktop development with C++** (*Développement Desktop en C++*).
+3. This installs Microsoft's C++ compiler (`cl.exe`), Windows SDK, and build utilities.
+
+##### Option B: MinGW-w64 (GCC for Windows)
+- **Method 1: WinLibs (Standalone Portable Archive - Quickest)**:
+  1. Download the latest UCRT / POSIX x86_64 release from [winlibs.com](https://winlibs.com/).
+  2. Extract the archive to `C:\mingw64`.
+  3. Add `C:\mingw64\bin` to your Windows `PATH` environment variable.
+- **Method 2: MSYS2 (Package Manager)**:
+  1. Download and install [MSYS2](https://www.msys2.org/) (or run `winget install MSYS2.MSYS2`).
+  2. Open the **MSYS2 MINGW64** shell and install the toolchain:
+     ```bash
+     pacman -Syu
+     pacman -S --needed mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja mingw-w64-x86_64-make
+     ```
+  3. Add `C:\msys64\mingw64\bin` to your Windows system `PATH`.
+- **Verify compiler**:
+  ```powershell
+  gcc --version
+  # or
+  g++ --version
+  ```
 
 ---
 
-## 🔨 Building from Terminal
+### 🔨 1. Building from Terminal
 
-### Windows (Visual Studio / CMake - Zero Config)
+#### Method A: Using Visual Studio / MSVC (Default Windows Generator)
 
 ```powershell
 # Configure (x64) - automatically detects bundled SDL 1.2 & SDL_ttf
@@ -95,50 +191,56 @@ cmake --build build --config Release
 .\build\Release\morpion.exe
 ```
 
----
+#### Method B: Using MinGW-w64 / GCC
 
-### Linux (Ubuntu / Debian / Fedora)
+```powershell
+# Configure with Ninja (or "MinGW Makefiles")
+cmake -B build -S . -G "Ninja" -DCMAKE_BUILD_TYPE=Release
+# Or: cmake -B build -S . -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
 
-```bash
-# Ubuntu / Debian
-sudo apt-get update
-sudo apt-get install -y build-essential cmake libsdl1.2-dev libsdl-ttf2.0-dev
-
-# Fedora
-sudo dnf install -y gcc-c++ cmake SDL-devel SDL_ttf-devel
-
-# Build & Run
-cmake -B build -DCMAKE_BUILD_TYPE=Release
+# Compile Release
 cmake --build build
-./build/morpion
+
+# Run!
+.\build\morpion.exe
 ```
 
 ---
 
-### macOS (Homebrew)
+### 🚀 2. Building in CLion (JetBrains IDE)
 
-```bash
-brew install cmake sdl sdl_ttf
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build
-./build/morpion
-```
+[CLion](https://www.jetbrains.com/clion/) integrates CMake natively (and comes with bundled CMake).
+
+#### Option A: CLion with Visual Studio Toolchain
+
+1. Open CLion &rarr; **File &rarr; Open** &rarr; Select the `Morpion` folder.
+2. Open **Settings (Ctrl+Alt+S) &rarr; Build, Execution, Deployment &rarr; Toolchains**:
+   - Select or add **Visual Studio** (CLion automatically detects your VS 2022 installation).
+3. In **Settings &rarr; Build, Execution, Deployment &rarr; CMake**:
+   - Set Architecture to **x64** (or default).
+4. Click **Reload CMake Project** if prompted.
+5. Click the green **Run ▶ (`morpion`)** button to build and launch the game!
+
+#### Option B: CLion with MinGW Toolchain
+
+1. Open CLion &rarr; **File &rarr; Open** &rarr; Select the `Morpion` folder.
+2. In **Settings (Ctrl+Alt+S) &rarr; Build, Execution, Deployment &rarr; Toolchains**:
+   - Add a **MinGW** toolchain and set the Environment path to `C:\mingw64` (or `C:\msys64\mingw64`).
+3. Click the green **Run ▶ (`morpion`)** button!
+
+#### Option C: CLion with WSL (Linux Subsystem on Windows)
+
+1. In your WSL terminal (Ubuntu / Debian):
+   ```bash
+   sudo apt-get update
+   sudo apt-get install -y build-essential cmake libsdl1.2-dev libsdl-ttf2.0-dev
+   ```
+2. In CLion: **Settings &rarr; Build, Execution, Deployment &rarr; Toolchains** &rarr; Add **WSL** (set as default).
+3. Click **Run ▶ (`morpion`)**.
 
 ---
 
-## 📜 About MinGW (Minimalist GNU for Windows)
-
-### 💡 Background & History
-
-**MinGW** (*Minimalist GNU for Windows*) is an open-source suite that ports the GNU Compiler Collection (GCC) and GNU Binutils natively to Microsoft Windows.
-
-- **Direct Native Runtime**: Unlike Cygwin (which requires a POSIX emulation DLL), MinGW links directly against the native Microsoft C Runtime (`msvcrt.dll` or modern `UCRT`). Executables run as native, lightweight Windows applications with zero emulation overhead.
-- **The 2013 Era**: When this project was built in 2013, the **Code::Blocks + MinGW bundle** was the quintessential toolkit for students and beginners learning C/C++ in France and worldwide (popularized by *Le Site du Zéro / OpenClassrooms*).
-- **Evolution to MinGW-w64 & MSYS2**: Today, the project has evolved into **MinGW-w64** and **MSYS2**, providing 64-bit support, modern C++17/20 standards, and package management.
-
----
-
-## 📦 Building the Windows Installer (Inno Setup)
+### 📦 3. Building the Windows Installer (Inno Setup)
 
 An Inno Setup script [`innosetup/morpion script.iss`](innosetup/morpion%20script.iss) is included to generate a standalone Windows installer.
 
