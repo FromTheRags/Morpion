@@ -80,10 +80,8 @@ jobs:
           cp -r assets dist/morpion-windows/
           cp assets/*.bmp assets/*.ttf dist/morpion-windows/ || true
           cp LICENSE OFL.txt README.md dist/morpion-windows/
-          cp cmake/sdl12/lib/x64/*.dll dist/morpion-windows/ || true
-          # Copy executable to repository root for Inno Setup compiler
-          cp build/morpion.exe ./
-          cd dist && zip -r ../morpion-windows-x64.zip morpion-windows
+          cmake -DEXECUTABLE="$PWD/build/morpion.exe" -DDESTINATION="$PWD/dist/morpion-windows" -DMINGW_BIN_DIR=/mingw64/bin -P cmake/CopyRuntimeDependencies.cmake
+          cd dist && cmake -E tar cf ../morpion-windows-x64.zip --format=zip morpion-windows
 
       - name: Build Inno Setup Installer
         shell: pwsh
