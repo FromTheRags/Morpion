@@ -6,6 +6,10 @@
 [![Library: SDL 1.2](https://img.shields.io/badge/Library-SDL%201.2-green.svg)](https://www.libsdl.org/)
 [![CMake](https://img.shields.io/badge/Build-CMake-064F8C.svg?logo=cmake&logoColor=white)](https://cmake.org/)
 
+> [!NOTE]
+> 🚀 **Looking for a modern code version?** Check out the [`SDL_3`](https://github.com/FromTheRags/Morpion/tree/SDL_3) branch!
+> While this `main` branch intentionally preserves the original 2013 junior C/C++ & SDL 1.2 code, the [`SDL_3`](https://github.com/FromTheRags/Morpion/tree/SDL_3) branch features a clean, native **SDL 3 & SDL3_ttf** implementation with GPU hardware acceleration, modern letterboxed presentation, and automated CI/CD.
+
 A nostalgic French **Tic-Tac-Toe (Morpion)** game built in **2013** as a junior personal programming project using C/C++, Code::Blocks, SDL 1.2, and SDL_ttf.
 Of course as I was yet learning at that time the code is very simple and annotated in french.
 I voluntary keep the code as it, without upgrading it, except for the need upgrade for builchain.
@@ -14,7 +18,13 @@ This repository is preserved and open-sourced under the **GNU General Public Lic
 
 ---
 
-## 📸 Screenshots
+## 📸 Demo & Screenshots
+
+<p align="center">
+  <a href="Demo/morpion.gif">
+    <img src="Demo/morpion.gif" alt="Morpion Gameplay Demo" width="480" />
+  </a>
+</p>
 
 | Menu Principal (Choix de la difficulté) | Plateau de Jeu (Partie en cours) |
 | :---: | :---: |
@@ -286,3 +296,5 @@ Continuous Integration is set up via [GitHub Actions](.github/workflows/build.ym
 > *« Ce programme a été créé par : FromTheRags »*
 >
 > Originally written in April–November 2013 using Code::Blocks IDE and MinGW on Windows. This open-source release preserves the original logic and spirit while making it accessible, portable, and clean for modern systems.
+>
+> 💡 *Looking for the modernized version using SDL 3? Check out the [`SDL_3`](https://github.com/FromTheRags/Morpion/tree/SDL_3) branch.*
