@@ -30,6 +30,15 @@ This repository is preserved and open-sourced under the **GNU General Public Lic
 | :---: | :---: |
 | <a href="Demo/menu.png"><img src="Demo/menu.png" alt="Menu Principal - Sélection de la difficulté" width="380" /></a> | <a href="Demo/ingame.png"><img src="Demo/ingame.png" alt="Partie en cours - Morpion" width="380" /></a> |
 
+<details>
+<summary>🎥 <b>How this demo GIF was generated (OBS Studio & FFmpeg)</b></summary>
+
+Recorded using [OBS Studio](https://obsproject.com/) and converted to an optimized palette GIF using [FFmpeg](https://ffmpeg.org/):
+```bash
+ffmpeg -ss 00:00:01 -to 00:00:14 -i morpion.mp4 -vf "fps=15,scale=640:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" -loop 0 morpion.gif
+```
+</details>
+
 ---
 
 ## 🎮 Features
