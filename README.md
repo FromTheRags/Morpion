@@ -13,7 +13,13 @@ This repository is preserved and open-sourced under the **GNU General Public Lic
 
 ---
 
-## 📸 Screenshots
+## 📸 Demo & Screenshots
+
+<p align="center">
+  <a href="Demo/morpion.gif">
+    <img src="Demo/morpion.gif" alt="Morpion Gameplay Demo" width="480" />
+  </a>
+</p>
 
 | Menu Principal (Choix de la difficulté) | Plateau de Jeu (Partie en cours) |
 | :---: | :---: |
