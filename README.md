@@ -14,6 +14,14 @@ This repository is preserved and open-sourced under the **GNU General Public Lic
 
 ---
 
+## 📸 Screenshots
+
+| Menu Principal (Choix de la difficulté) | Plateau de Jeu (Partie en cours) |
+| :---: | :---: |
+| <a href="Demo/menu.png"><img src="Demo/menu.png" alt="Menu Principal - Sélection de la difficulté" width="380" /></a> | <a href="Demo/ingame.png"><img src="Demo/ingame.png" alt="Partie en cours - Morpion" width="380" /></a> |
+
+---
+
 ## 🎮 Features
 
 - **Classic 3x3 Gameplay**: Play as Circles (O) against the AI Crosses (X) on an antique Japanese cedar wood board.
