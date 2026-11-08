@@ -35,7 +35,6 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 Source: "..\dist\morpion-windows\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\morpion-windows\assets\*"; DestDir: "{app}\assets"; Flags: ignoreversion recursesubdirs
-Source: "..\dist\morpion-windows\assets\*"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\morpion-windows\*.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\morpion-windows\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\morpion-windows\OFL.txt"; DestDir: "{app}"; Flags: ignoreversion

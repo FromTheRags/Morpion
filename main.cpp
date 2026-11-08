@@ -1,56 +1,90 @@
-#if defined(_MSC_VER) && (_MSC_VER >= 1900)
-#include <cstdio>
-extern "C" {
-    FILE * __cdecl __iob_func(void)
-    {
-        return __acrt_iob_func(0);
-    }
-}
-#endif
-
 #include <cstdlib>
 #include <cstdio>
 #include <ctime>
 #include <string>
 
-#if defined(__APPLE__)
-    #include <SDL/SDL.h>
-    #include <SDL/SDL_ttf.h>
-#elif defined(__linux__) || defined(__unix__)
-    #if __has_include(<SDL/SDL.h>)
-        #include <SDL/SDL.h>
-    #else
-        #include <SDL.h>
+#if defined(_WIN32)
+    #ifndef WIN32_LEAN_AND_MEAN
+        #define WIN32_LEAN_AND_MEAN
     #endif
-    #if __has_include(<SDL/SDL_ttf.h>)
-        #include <SDL/SDL_ttf.h>
-    #else
-        #include <SDL_ttf.h>
+    #ifndef NOMINMAX
+        #define NOMINMAX
     #endif
+    #include <windows.h>
+    #undef min
+    #undef max
+#elif defined(__APPLE__)
+    #include <mach-o/dyld.h>
+    #include <unistd.h>
 #else
-    #if __has_include(<SDL/SDL.h>)
-        #include <SDL/SDL.h>
-    #else
-        #include <SDL.h>
-    #endif
-    #if __has_include(<SDL/SDL_ttf.h>)
-        #include <SDL/SDL_ttf.h>
-    #else
-        #include <SDL_ttf.h>
-    #endif
+    #include <unistd.h>
 #endif
+
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_main.h>
+#include <SDL3_ttf/SDL_ttf.h>
 
 // Base virtual screen dimensions (original 2013 game resolution)
 const int VIRTUAL_W = 760;
 const int VIRTUAL_H = 757;
 
-// Global screen pointers
-static SDL_Surface *g_ecran = NULL;           // Actual window / display surface
-static SDL_Surface *g_virtual_screen = NULL;   // 760x757 render buffer
+// Global screen and renderer pointers
+static SDL_Window *g_window = NULL;
+static SDL_Renderer *g_renderer = NULL;
+static SDL_Texture *g_canvas = NULL;   // 760x757 persistent target texture
 static bool g_fullscreen = false;
+
+struct SDL_Point2D {
+    int x;
+    int y;
+};
+
+static std::string get_executable_dir()
+{
+#if defined(_WIN32)
+    char buffer[MAX_PATH];
+    DWORD len = GetModuleFileNameA(NULL, buffer, MAX_PATH);
+    if (len > 0 && len < MAX_PATH)
+    {
+        std::string path(buffer, len);
+        size_t pos = path.find_last_of("\\/");
+        if (pos != std::string::npos)
+        {
+            return path.substr(0, pos + 1);
+        }
+    }
+#elif defined(__APPLE__)
+    char buffer[1024];
+    uint32_t size = sizeof(buffer);
+    if (_NSGetExecutablePath(buffer, &size) == 0)
+    {
+        std::string path(buffer);
+        size_t pos = path.find_last_of('/');
+        if (pos != std::string::npos)
+        {
+            return path.substr(0, pos + 1);
+        }
+    }
+#else
+    char buffer[1024];
+    ssize_t len = readlink("/proc/self/exe", buffer, sizeof(buffer) - 1);
+    if (len != -1)
+    {
+        buffer[len] = '\0';
+        std::string path(buffer);
+        size_t pos = path.find_last_of('/');
+        if (pos != std::string::npos)
+        {
+            return path.substr(0, pos + 1);
+        }
+    }
+#endif
+    return "";
+}
 
 static std::string get_asset_path(const char *name)
 {
+    // 1. Check relative to current working directory: assets/<name>
     std::string candidate = std::string("assets/") + name;
     FILE *f = fopen(candidate.c_str(), "rb");
     if (f)
@@ -58,238 +92,167 @@ static std::string get_asset_path(const char *name)
         fclose(f);
         return candidate;
     }
-    return std::string(name);
+
+    // 2. Check next to executable: <exe_dir>/assets/<name>
+    std::string exe_dir = get_executable_dir();
+    if (!exe_dir.empty())
+    {
+        candidate = exe_dir + "assets/" + name;
+        f = fopen(candidate.c_str(), "rb");
+        if (f)
+        {
+            fclose(f);
+            return candidate;
+        }
+    }
+
+    // 3. Check parent directory: ../assets/<name> (useful when launched from a build directory)
+    candidate = std::string("../assets/") + name;
+    f = fopen(candidate.c_str(), "rb");
+    if (f)
+    {
+        fclose(f);
+        return candidate;
+    }
+
+    return std::string("assets/") + name;
 }
 
 // Function prototypes
 void present_screen();
+void toggle_fullscreen();
 void handle_window_events(SDL_Event *event);
-SDL_Rect transform_mouse_coords(int mx, int my);
+SDL_Point2D get_logical_mouse_coords(SDL_Event *event);
 
 void pause_screen();
 void affrond(int pcase);
 void affcroix(int pcase);
-int coordonnees(SDL_Rect posiclic);
+int coordonnees(SDL_Point2D posiclic);
 int verifie(int a, int b, int c, int d, int e, int f, int g, int h, int i);
 int verifie2(int a, int b, int c, int d, int e, int f, int g, int h, int i);
 int vict(int a, int b, int c, int d, int e, int f, int g, int h, int i);
 int plein(int a, int b, int c, int d, int e, int f, int g, int h, int i);
 void grille();
-int choixniveau(SDL_Rect posiclic);
+int choixniveau(SDL_Point2D posiclic);
 void nice();
 
-void draw_text_centered(SDL_Surface *dst, TTF_Font *font, const char *str, SDL_Color color, int center_x, int top_y);
-void draw_button_text(SDL_Surface *dst, TTF_Font *font, const char *str, SDL_Color fg, SDL_Color bg, SDL_Rect btn_rect);
-void draw_victory_banner(SDL_Surface *dst, TTF_Font *font, int top_y);
-void draw_defeat_banner(SDL_Surface *dst, TTF_Font *font, int top_y);
-void draw_draw_banner(SDL_Surface *dst, TTF_Font *font);
-
-// Pixel-format-aware scaling helper for fullscreen / resizing with aspect ratio preservation
-void blit_scaled(SDL_Surface *src, SDL_Surface *dst, const SDL_Rect &dst_rect)
-{
-    if (!src || !dst) return;
-    if (SDL_MUSTLOCK(src)) SDL_LockSurface(src);
-    if (SDL_MUSTLOCK(dst)) SDL_LockSurface(dst);
-
-    SDL_PixelFormat *sfmt = src->format;
-    SDL_PixelFormat *dfmt = dst->format;
-
-    bool same_format = (sfmt->BitsPerPixel == 32 && dfmt->BitsPerPixel == 32 &&
-                        sfmt->Rmask == dfmt->Rmask &&
-                        sfmt->Gmask == dfmt->Gmask &&
-                        sfmt->Bmask == dfmt->Bmask);
-
-    if (same_format)
-    {
-        Uint32 *src_pixels = (Uint32*)src->pixels;
-        Uint32 *dst_pixels = (Uint32*)dst->pixels;
-        int src_pitch = src->pitch / 4;
-        int dst_pitch = dst->pitch / 4;
-
-        for (int y = 0; y < dst_rect.h; ++y)
-        {
-            int src_y = (y * src->h) / dst_rect.h;
-            if (src_y >= src->h) src_y = src->h - 1;
-            Uint32 *dst_row = dst_pixels + (dst_rect.y + y) * dst_pitch + dst_rect.x;
-            Uint32 *src_row = src_pixels + src_y * src_pitch;
-
-            for (int x = 0; x < dst_rect.w; ++x)
-            {
-                int src_x = (x * src->w) / dst_rect.w;
-                if (src_x >= src->w) src_x = src->w - 1;
-                dst_row[x] = src_row[src_x];
-            }
-        }
-    }
-    else
-    {
-        Uint32 *src_pixels = (Uint32*)src->pixels;
-        int src_pitch = src->pitch / 4;
-
-        for (int y = 0; y < dst_rect.h; ++y)
-        {
-            int src_y = (y * src->h) / dst_rect.h;
-            if (src_y >= src->h) src_y = src->h - 1;
-            Uint32 *src_row = src_pixels + src_y * src_pitch;
-
-            for (int x = 0; x < dst_rect.w; ++x)
-            {
-                int src_x = (x * src->w) / dst_rect.w;
-                if (src_x >= src->w) src_x = src->w - 1;
-                Uint32 spix = src_row[src_x];
-
-                Uint8 r = (Uint8)(((spix & sfmt->Rmask) >> sfmt->Rshift) << sfmt->Rloss);
-                Uint8 g = (Uint8)(((spix & sfmt->Gmask) >> sfmt->Gshift) << sfmt->Gloss);
-                Uint8 b = (Uint8)(((spix & sfmt->Bmask) >> sfmt->Bshift) << sfmt->Bloss);
-
-                Uint32 dpix = ((r >> dfmt->Rloss) << dfmt->Rshift) |
-                              ((g >> dfmt->Gloss) << dfmt->Gshift) |
-                              ((b >> dfmt->Bloss) << dfmt->Bshift);
-
-                if (dfmt->BitsPerPixel == 32)
-                {
-                    Uint32 *dst_pixels = (Uint32*)dst->pixels;
-                    int dst_pitch = dst->pitch / 4;
-                    dst_pixels[(dst_rect.y + y) * dst_pitch + (dst_rect.x + x)] = dpix;
-                }
-                else if (dfmt->BitsPerPixel == 16)
-                {
-                    Uint16 *dst_pixels = (Uint16*)dst->pixels;
-                    int dst_pitch = dst->pitch / 2;
-                    dst_pixels[(dst_rect.y + y) * dst_pitch + (dst_rect.x + x)] = (Uint16)dpix;
-                }
-            }
-        }
-    }
-
-    if (SDL_MUSTLOCK(src)) SDL_UnlockSurface(src);
-    if (SDL_MUSTLOCK(dst)) SDL_UnlockSurface(dst);
-}
+void draw_text_centered(TTF_Font *font, const char *str, SDL_Color color, int center_x, int top_y);
+void draw_button_text(TTF_Font *font, const char *str, SDL_Color fg, SDL_Color bg, SDL_FRect btn_rect);
+void draw_victory_banner(TTF_Font *font, int top_y);
+void draw_defeat_banner(TTF_Font *font, int top_y);
+void draw_draw_banner(TTF_Font *font);
 
 void present_screen()
 {
-    if (!g_virtual_screen || !g_ecran) return;
+    if (!g_renderer || !g_canvas) return;
 
-    if (g_ecran->w == g_virtual_screen->w && g_ecran->h == g_virtual_screen->h &&
-        g_ecran->format->Rmask == g_virtual_screen->format->Rmask &&
-        g_ecran->format->Gmask == g_virtual_screen->format->Gmask &&
-        g_ecran->format->Bmask == g_virtual_screen->format->Bmask &&
-        g_ecran->format->BitsPerPixel == g_virtual_screen->format->BitsPerPixel)
-    {
-        SDL_BlitSurface(g_virtual_screen, NULL, g_ecran, NULL);
-    }
-    else
-    {
-        float scale = ((float)g_ecran->w / VIRTUAL_W < (float)g_ecran->h / VIRTUAL_H)
-                    ? ((float)g_ecran->w / VIRTUAL_W)
-                    : ((float)g_ecran->h / VIRTUAL_H);
-        SDL_Rect dst;
-        dst.w = (Uint16)(VIRTUAL_W * scale);
-        dst.h = (Uint16)(VIRTUAL_H * scale);
-        dst.x = (Sint16)((g_ecran->w - dst.w) / 2);
-        dst.y = (Sint16)((g_ecran->h - dst.h) / 2);
+    // Switch render target to the main window
+    SDL_SetRenderTarget(g_renderer, NULL);
+    SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, 255);
+    SDL_RenderClear(g_renderer);
 
-        SDL_FillRect(g_ecran, NULL, 0x000000);
-        blit_scaled(g_virtual_screen, g_ecran, dst);
-    }
-    SDL_Flip(g_ecran);
+    // Draw the 760x757 canvas (automatically scaled and letterboxed by SDL 3 logical presentation)
+    SDL_RenderTexture(g_renderer, g_canvas, NULL, NULL);
+    SDL_RenderPresent(g_renderer);
+
+    // Switch target back to g_canvas for subsequent game drawing
+    SDL_SetRenderTarget(g_renderer, g_canvas);
 }
 
 void toggle_fullscreen()
 {
+    if (!g_window) return;
     g_fullscreen = !g_fullscreen;
-    Uint32 flags = SDL_HWSURFACE | SDL_DOUBLEBUF | (g_fullscreen ? SDL_FULLSCREEN : SDL_RESIZABLE);
-    int w = g_fullscreen ? 0 : VIRTUAL_W;
-    int h = g_fullscreen ? 0 : VIRTUAL_H;
-    g_ecran = SDL_SetVideoMode(w, h, 32, flags);
-    if (!g_ecran)
-    {
-        g_fullscreen = false;
-        g_ecran = SDL_SetVideoMode(VIRTUAL_W, VIRTUAL_H, 32, SDL_HWSURFACE | SDL_RESIZABLE | SDL_DOUBLEBUF);
-    }
+    SDL_SetWindowFullscreen(g_window, g_fullscreen);
     present_screen();
 }
 
 void handle_window_events(SDL_Event *event)
 {
-    if (event->type == SDL_VIDEORESIZE)
+    if (event->type == SDL_EVENT_KEY_DOWN)
     {
-        g_ecran = SDL_SetVideoMode(event->resize.w, event->resize.h, 32, SDL_HWSURFACE | SDL_RESIZABLE | SDL_DOUBLEBUF);
-        present_screen();
-    }
-    else if (event->type == SDL_KEYDOWN)
-    {
-        if (event->key.keysym.sym == SDLK_F11 ||
-            (event->key.keysym.sym == SDLK_RETURN && (event->key.keysym.mod & KMOD_ALT)) ||
-            event->key.keysym.sym == SDLK_f)
+        if (event->key.key == SDLK_F11 ||
+            (event->key.key == SDLK_RETURN && (event->key.mod & SDL_KMOD_ALT)) ||
+            event->key.key == SDLK_F)
         {
             toggle_fullscreen();
         }
     }
-}
-
-SDL_Rect transform_mouse_coords(int mx, int my)
-{
-    SDL_Rect res = {0, 0, 0, 0};
-    if (!g_ecran) return res;
-
-    float scale = ((float)g_ecran->w / VIRTUAL_W < (float)g_ecran->h / VIRTUAL_H)
-                ? ((float)g_ecran->w / VIRTUAL_W)
-                : ((float)g_ecran->h / VIRTUAL_H);
-    int dst_w = (int)(VIRTUAL_W * scale);
-    int dst_h = (int)(VIRTUAL_H * scale);
-    int dst_x = (g_ecran->w - dst_w) / 2;
-    int dst_y = (g_ecran->h - dst_h) / 2;
-
-    if (mx >= dst_x && mx < dst_x + dst_w && my >= dst_y && my < dst_y + dst_h)
+    else if (event->type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED ||
+             event->type == SDL_EVENT_WINDOW_RESIZED)
     {
-        res.x = (Sint16)((mx - dst_x) * (float)VIRTUAL_W / dst_w);
-        res.y = (Sint16)((my - dst_y) * (float)VIRTUAL_H / dst_h);
-    }
-    else
-    {
-        res.x = -1;
-        res.y = -1;
-    }
-    return res;
-}
-
-void draw_text_centered(SDL_Surface *dst, TTF_Font *font, const char *str, SDL_Color color, int center_x, int top_y)
-{
-    if (!font || !str || !dst) return;
-    SDL_Surface *txt = TTF_RenderUTF8_Blended(font, str, color);
-    if (txt)
-    {
-        SDL_Rect r = { (Sint16)(center_x - txt->w / 2), (Sint16)top_y, (Uint16)txt->w, (Uint16)txt->h };
-        SDL_BlitSurface(txt, NULL, dst, &r);
-        SDL_FreeSurface(txt);
+        present_screen();
     }
 }
 
-void draw_button_text(SDL_Surface *dst, TTF_Font *font, const char *str, SDL_Color fg, SDL_Color bg, SDL_Rect btn_rect)
+SDL_Point2D get_logical_mouse_coords(SDL_Event *event)
 {
-    if (!font || !str || !dst) return;
-    SDL_Surface *txt = TTF_RenderUTF8_Shaded(font, str, fg, bg);
-    if (txt)
+    SDL_Point2D pt = { -1, -1 };
+    if (!event || !g_renderer) return pt;
+
+    // Convert screen coordinates to logical render coordinates
+    SDL_ConvertEventToRenderCoordinates(g_renderer, event);
+    if (event->button.x >= 0.0f && event->button.x <= (float)VIRTUAL_W &&
+        event->button.y >= 0.0f && event->button.y <= (float)VIRTUAL_H)
     {
-        SDL_Rect r = { (Sint16)(btn_rect.x + (btn_rect.w - txt->w) / 2), (Sint16)(btn_rect.y + (btn_rect.h - txt->h) / 2), (Uint16)txt->w, (Uint16)txt->h };
-        SDL_BlitSurface(txt, NULL, dst, &r);
-        SDL_FreeSurface(txt);
+        pt.x = (int)event->button.x;
+        pt.y = (int)event->button.y;
+    }
+    return pt;
+}
+
+void draw_text_centered(TTF_Font *font, const char *str, SDL_Color color, int center_x, int top_y)
+{
+    if (!font || !str || !g_renderer || !g_canvas) return;
+    SDL_Surface *txt_surf = TTF_RenderText_Blended(font, str, 0, color);
+    if (txt_surf)
+    {
+        SDL_Texture *txt_tex = SDL_CreateTextureFromSurface(g_renderer, txt_surf);
+        if (txt_tex)
+        {
+            SDL_FRect r = { (float)(center_x - txt_surf->w / 2), (float)top_y, (float)txt_surf->w, (float)txt_surf->h };
+            SDL_RenderTexture(g_renderer, txt_tex, NULL, &r);
+            SDL_DestroyTexture(txt_tex);
+        }
+        SDL_DestroySurface(txt_surf);
     }
 }
 
-void draw_victory_banner(SDL_Surface *dst, TTF_Font *font, int top_y)
+void draw_button_text(TTF_Font *font, const char *str, SDL_Color fg, SDL_Color bg, SDL_FRect btn_rect)
 {
+    if (!font || !str || !g_renderer || !g_canvas) return;
+    SDL_Surface *txt_surf = TTF_RenderText_Shaded(font, str, 0, fg, bg);
+    if (txt_surf)
+    {
+        SDL_Texture *txt_tex = SDL_CreateTextureFromSurface(g_renderer, txt_surf);
+        if (txt_tex)
+        {
+            SDL_FRect r = {
+                btn_rect.x + (btn_rect.w - (float)txt_surf->w) / 2.0f,
+                btn_rect.y + (btn_rect.h - (float)txt_surf->h) / 2.0f,
+                (float)txt_surf->w,
+                (float)txt_surf->h
+            };
+            SDL_RenderTexture(g_renderer, txt_tex, NULL, &r);
+            SDL_DestroyTexture(txt_tex);
+        }
+        SDL_DestroySurface(txt_surf);
+    }
+}
+
+void draw_victory_banner(TTF_Font *font, int top_y)
+{
+    if (!font || !g_renderer || !g_canvas) return;
     const char *letters[] = {"V", "I", "C", "T", "O", "I", "R", "E"};
     SDL_Color colors[] = {
-        {255, 0, 0},     // Rouge
-        {255, 81, 255},  // Rose
-        {255, 123, 0},   // Orange
-        {255, 233, 0},   // Jaune
-        {177, 255, 23},  // Verte pomme
-        {10, 206, 212},  // Indigo
-        {0, 0, 255},     // Bleu marine
-        {165, 32, 175}   // Violette
+        {255, 0, 0, 255},     // Rouge
+        {255, 81, 255, 255},  // Rose
+        {255, 123, 0, 255},   // Orange
+        {255, 233, 0, 255},   // Jaune
+        {177, 255, 23, 255},  // Verte pomme
+        {10, 206, 212, 255},  // Indigo
+        {0, 0, 255, 255},     // Bleu marine
+        {165, 32, 175, 255}   // Violette
     };
     int num_letters = 8;
     int letter_widths[8];
@@ -299,7 +262,7 @@ void draw_victory_banner(SDL_Surface *dst, TTF_Font *font, int top_y)
     for (int k = 0; k < num_letters; ++k)
     {
         int w = 0, h = 0;
-        TTF_SizeUTF8(font, letters[k], &w, &h);
+        TTF_GetStringSize(font, letters[k], 0, &w, &h);
         letter_widths[k] = w;
         total_width += w;
         if (k > 0) total_width += spacing;
@@ -310,22 +273,28 @@ void draw_victory_banner(SDL_Surface *dst, TTF_Font *font, int top_y)
 
     for (int k = 0; k < num_letters; ++k)
     {
-        SDL_Surface *txt = TTF_RenderUTF8_Blended(font, letters[k], colors[k]);
+        SDL_Surface *txt = TTF_RenderText_Blended(font, letters[k], 0, colors[k]);
         if (txt)
         {
-            SDL_Rect r = { (Sint16)curr_x, (Sint16)top_y, (Uint16)txt->w, (Uint16)txt->h };
-            SDL_BlitSurface(txt, NULL, dst, &r);
-            SDL_FreeSurface(txt);
+            SDL_Texture *tex = SDL_CreateTextureFromSurface(g_renderer, txt);
+            if (tex)
+            {
+                SDL_FRect r = { (float)curr_x, (float)top_y, (float)txt->w, (float)txt->h };
+                SDL_RenderTexture(g_renderer, tex, NULL, &r);
+                SDL_DestroyTexture(tex);
+            }
+            SDL_DestroySurface(txt);
         }
         curr_x += letter_widths[k] + spacing;
     }
 }
 
-void draw_defeat_banner(SDL_Surface *dst, TTF_Font *font, int top_y)
+void draw_defeat_banner(TTF_Font *font, int top_y)
 {
+    if (!font || !g_renderer || !g_canvas) return;
     const char *letters[] = {"D", "E", "F", "A", "I", "T", "E"};
-    SDL_Color couleurNoire = {0, 0, 0};
-    SDL_Color couleurbeige = {240, 213, 185};
+    SDL_Color couleurNoire = {0, 0, 0, 255};
+    SDL_Color couleurbeige = {240, 213, 185, 255};
     SDL_Color colors[] = {
         couleurNoire, couleurbeige, couleurNoire, couleurbeige,
         couleurNoire, couleurbeige, couleurNoire
@@ -338,7 +307,7 @@ void draw_defeat_banner(SDL_Surface *dst, TTF_Font *font, int top_y)
     for (int k = 0; k < num_letters; ++k)
     {
         int w = 0, h = 0;
-        TTF_SizeUTF8(font, letters[k], &w, &h);
+        TTF_GetStringSize(font, letters[k], 0, &w, &h);
         letter_widths[k] = w;
         total_width += w;
         if (k > 0) total_width += spacing;
@@ -349,47 +318,88 @@ void draw_defeat_banner(SDL_Surface *dst, TTF_Font *font, int top_y)
 
     for (int k = 0; k < num_letters; ++k)
     {
-        SDL_Surface *txt = TTF_RenderUTF8_Blended(font, letters[k], colors[k]);
+        SDL_Surface *txt = TTF_RenderText_Blended(font, letters[k], 0, colors[k]);
         if (txt)
         {
-            SDL_Rect r = { (Sint16)curr_x, (Sint16)top_y, (Uint16)txt->w, (Uint16)txt->h };
-            SDL_BlitSurface(txt, NULL, dst, &r);
-            SDL_FreeSurface(txt);
+            SDL_Texture *tex = SDL_CreateTextureFromSurface(g_renderer, txt);
+            if (tex)
+            {
+                SDL_FRect r = { (float)curr_x, (float)top_y, (float)txt->w, (float)txt->h };
+                SDL_RenderTexture(g_renderer, tex, NULL, &r);
+                SDL_DestroyTexture(tex);
+            }
+            SDL_DestroySurface(txt);
         }
         curr_x += letter_widths[k] + spacing;
     }
 }
 
-void draw_draw_banner(SDL_Surface *dst, TTF_Font *font)
+void draw_draw_banner(TTF_Font *font)
 {
-    SDL_Color couleurviolette = {165, 32, 175};
-    draw_text_centered(dst, font, "MATCH", couleurviolette, VIRTUAL_W / 2, 60);
-    draw_text_centered(dst, font, "NUL", couleurviolette, VIRTUAL_W / 2, 170);
+    SDL_Color couleurviolette = {165, 32, 175, 255};
+    draw_text_centered(font, "MATCH", couleurviolette, VIRTUAL_W / 2, 60);
+    draw_text_centered(font, "NUL", couleurviolette, VIRTUAL_W / 2, 170);
 }
 
-int main ( int argc, char* argv[] )
+int main(int argc, char *argv[])
 {
-    if (TTF_Init() == -1)
-    {
-        fprintf(stderr, "Erreur TTF_Init : %s\n", TTF_GetError());
-        exit(EXIT_FAILURE);
-    }
+    (void)argc;
+    (void)argv;
 
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_NOPARACHUTE) == -1)
+    if (!SDL_Init(SDL_INIT_VIDEO))
     {
         fprintf(stderr, "Erreur SDL_Init : %s\n", SDL_GetError());
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
     }
 
-    SDL_WM_SetCaption("Morpion ! (F11: Plein écran)", NULL);
+    if (!TTF_Init())
+    {
+        fprintf(stderr, "Erreur TTF_Init : %s\n", SDL_GetError());
+        SDL_Quit();
+        return EXIT_FAILURE;
+    }
+
     srand((unsigned int)time(NULL));
 
-    SDL_Color couleurNoire = {0, 0, 0};
-    SDL_Color couleurindigo = {10, 206, 212};
-    SDL_Color couleurverte = {128, 255, 23};
-    SDL_Color couleurneutre = {190, 150, 120};
-    SDL_Color couleurrouge = {255, 0, 0};
-    SDL_Color couleurblanche = {255, 255, 255};
+    if (!SDL_CreateWindowAndRenderer("Morpion ! (F11: Plein écran)", VIRTUAL_W, VIRTUAL_H, SDL_WINDOW_RESIZABLE, &g_window, &g_renderer))
+    {
+        fprintf(stderr, "Impossible de créer la fenêtre et le renderer : %s\n", SDL_GetError());
+        TTF_Quit();
+        SDL_Quit();
+        return EXIT_FAILURE;
+    }
+
+    // Set logical presentation with aspect ratio preservation (letterbox)
+    SDL_SetRenderLogicalPresentation(g_renderer, VIRTUAL_W, VIRTUAL_H, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+
+    // Set window icon
+    SDL_Surface *icon = SDL_LoadBMP(get_asset_path("sdl_icone.bmp").c_str());
+    if (icon)
+    {
+        SDL_SetWindowIcon(g_window, icon);
+        SDL_DestroySurface(icon);
+    }
+
+    // Create 760x757 persistent canvas texture
+    g_canvas = SDL_CreateTexture(g_renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, VIRTUAL_W, VIRTUAL_H);
+    if (!g_canvas)
+    {
+        fprintf(stderr, "Impossible de créer la texture canvas : %s\n", SDL_GetError());
+        SDL_DestroyRenderer(g_renderer);
+        SDL_DestroyWindow(g_window);
+        TTF_Quit();
+        SDL_Quit();
+        return EXIT_FAILURE;
+    }
+
+    SDL_SetRenderTarget(g_renderer, g_canvas);
+
+    SDL_Color couleurNoire = {0, 0, 0, 255};
+    SDL_Color couleurindigo = {10, 206, 212, 255};
+    SDL_Color couleurverte = {128, 255, 23, 255};
+    SDL_Color couleurneutre = {190, 150, 120, 255};
+    SDL_Color couleurrouge = {255, 0, 0, 255};
+    SDL_Color couleurblanche = {255, 255, 255, 255};
 
     TTF_Font *police = NULL;
 
@@ -397,32 +407,7 @@ int main ( int argc, char* argv[] )
     int lasse = 0;
     int booleen = 1;
 
-    SDL_Rect posiclic = {0, 0, 0, 0};
-
-    // Set window icon safely
-    SDL_Surface *icon = SDL_LoadBMP(get_asset_path("sdl_icone.bmp").c_str());
-    if (icon)
-    {
-        SDL_WM_SetIcon(icon, NULL);
-    }
-
-    // Set initial window video mode
-    g_ecran = SDL_SetVideoMode(VIRTUAL_W, VIRTUAL_H, 32, SDL_HWSURFACE | SDL_RESIZABLE | SDL_DOUBLEBUF);
-    if (g_ecran == NULL)
-    {
-        fprintf(stderr, "Impossible de charger le mode vidéo : %s\n", SDL_GetError());
-        exit(EXIT_FAILURE);
-    }
-
-    // Create virtual rendering surface matching display format
-    g_virtual_screen = SDL_CreateRGBSurface(SDL_SWSURFACE, VIRTUAL_W, VIRTUAL_H, 32,
-        g_ecran->format->Rmask, g_ecran->format->Gmask, g_ecran->format->Bmask, g_ecran->format->Amask);
-
-    if (g_virtual_screen == NULL)
-    {
-        fprintf(stderr, "Impossible de créer la surface virtuelle\n");
-        exit(EXIT_FAILURE);
-    }
+    SDL_Point2D posiclic = {0, 0};
 
     grille();
 
@@ -432,23 +417,23 @@ int main ( int argc, char* argv[] )
     while(rejouer == 1 && lasse == 0)
     {
         nice();
-        police = TTF_OpenFont(get_asset_path("PatrickHand-Regular.ttf").c_str(), 40);
+        police = TTF_OpenFont(get_asset_path("PatrickHand-Regular.ttf").c_str(), 40.0f);
 
         // Menu title cleanly centered
-        draw_text_centered(g_virtual_screen, police, "Contre quel niveau d'I.A veux-tu jouer ?", couleurblanche, VIRTUAL_W / 2, 275);
+        draw_text_centered(police, "Contre quel niveau d'I.A veux-tu jouer ?", couleurblanche, VIRTUAL_W / 2, 275);
 
         // Menu buttons with centered text inside their clickable boxes
-        SDL_Rect btn_facile = {120, 350, 298, 67};
-        draw_button_text(g_virtual_screen, police, "  Vraiment Facile  ", couleurNoire, couleurverte, btn_facile);
+        SDL_FRect btn_facile = {120.0f, 350.0f, 298.0f, 67.0f};
+        draw_button_text(police, "  Vraiment Facile  ", couleurNoire, couleurverte, btn_facile);
 
-        SDL_Rect btn_normal = {454, 350, 264, 67};
-        draw_button_text(g_virtual_screen, police, "   Normal   ", couleurNoire, couleurneutre, btn_normal);
+        SDL_FRect btn_normal = {454.0f, 350.0f, 264.0f, 67.0f};
+        draw_button_text(police, "   Normal   ", couleurNoire, couleurneutre, btn_normal);
 
-        SDL_Rect btn_difficile = {120, 451, 298, 67};
-        draw_button_text(g_virtual_screen, police, "   Difficile   ", couleurNoire, couleurrouge, btn_difficile);
+        SDL_FRect btn_difficile = {120.0f, 451.0f, 298.0f, 67.0f};
+        draw_button_text(police, "   Difficile   ", couleurNoire, couleurrouge, btn_difficile);
 
-        SDL_Rect btn_impossible = {454, 451, 264, 67};
-        draw_button_text(g_virtual_screen, police, "  Impossible  ", couleurblanche, couleurNoire, btn_impossible);
+        SDL_FRect btn_impossible = {454.0f, 451.0f, 264.0f, 67.0f};
+        draw_button_text(police, "  Impossible  ", couleurblanche, couleurNoire, btn_impossible);
 
         present_screen();
 
@@ -457,22 +442,27 @@ int main ( int argc, char* argv[] )
         continuer = 1;
         while(continuer)
         {
-            SDL_WaitEvent(&event);
+            if (!SDL_WaitEvent(&event)) break;
             handle_window_events(&event);
 
             switch(event.type)
             {
-            case SDL_QUIT:
+            case SDL_EVENT_QUIT:
                 continuer = 0;
                 lasse = 1;
                 break;
-            case SDL_MOUSEBUTTONUP:
-                posiclic = transform_mouse_coords(event.button.x, event.button.y);
-                niveau = choixniveau(posiclic);
-                if(niveau != 0)
-                    continuer = 0;
-                else
-                    continuer = 1;
+            case SDL_EVENT_MOUSE_BUTTON_UP:
+                if (event.button.button == SDL_BUTTON_LEFT)
+                {
+                    posiclic = get_logical_mouse_coords(&event);
+                    niveau = choixniveau(posiclic);
+                    if(niveau != 0)
+                        continuer = 0;
+                    else
+                        continuer = 1;
+                }
+                break;
+            default:
                 break;
             }
         }
@@ -486,18 +476,23 @@ int main ( int argc, char* argv[] )
                 continuer = 1;
                 while(continuer)
                 {
-                    SDL_WaitEvent(&event);
+                    if (!SDL_WaitEvent(&event)) break;
                     handle_window_events(&event);
 
                     switch(event.type)
                     {
-                    case SDL_QUIT:
+                    case SDL_EVENT_QUIT:
                         continuer = 0;
                         lasse = 1;
                         break;
-                    case SDL_MOUSEBUTTONUP:
-                        posiclic = transform_mouse_coords(event.button.x, event.button.y);
-                        continuer = 0;
+                    case SDL_EVENT_MOUSE_BUTTON_UP:
+                        if (event.button.button == SDL_BUTTON_LEFT)
+                        {
+                            posiclic = get_logical_mouse_coords(&event);
+                            continuer = 0;
+                        }
+                        break;
+                    default:
                         break;
                     }
                 }
@@ -585,18 +580,23 @@ int main ( int argc, char* argv[] )
                 continuer = 1;
                 while(continuer)
                 {
-                    SDL_WaitEvent(&event);
+                    if (!SDL_WaitEvent(&event)) break;
                     handle_window_events(&event);
 
                     switch(event.type)
                     {
-                    case SDL_QUIT:
+                    case SDL_EVENT_QUIT:
                         continuer = 0;
                         lasse = 1;
                         break;
-                    case SDL_MOUSEBUTTONUP:
-                        posiclic = transform_mouse_coords(event.button.x, event.button.y);
-                        continuer = 0;
+                    case SDL_EVENT_MOUSE_BUTTON_UP:
+                        if (event.button.button == SDL_BUTTON_LEFT)
+                        {
+                            posiclic = get_logical_mouse_coords(&event);
+                            continuer = 0;
+                        }
+                        break;
+                    default:
                         break;
                     }
                 }
@@ -681,37 +681,37 @@ int main ( int argc, char* argv[] )
         // Fin du round / affichage résultat
         if(lasse == 0)
         {
-            police = TTF_OpenFont(get_asset_path("Graduate-Regular.ttf").c_str(), 95);
+            police = TTF_OpenFont(get_asset_path("Graduate-Regular.ttf").c_str(), 95.0f);
 
             if(vvict == 1)
             {
-                draw_victory_banner(g_virtual_screen, police, 100);
+                draw_victory_banner(police, 100);
                 present_screen();
             }
             else if(vvict == 2)
             {
-                draw_defeat_banner(g_virtual_screen, police, 100);
+                draw_defeat_banner(police, 100);
                 present_screen();
             }
             else if(pplein == 1)
             {
-                draw_draw_banner(g_virtual_screen, police);
+                draw_draw_banner(police);
                 present_screen();
             }
 
             if (police) { TTF_CloseFont(police); police = NULL; }
 
-            police = TTF_OpenFont(get_asset_path("PatrickHand-Regular.ttf").c_str(), 42);
+            police = TTF_OpenFont(get_asset_path("PatrickHand-Regular.ttf").c_str(), 42.0f);
 
             // Replay question cleanly centered
-            draw_text_centered(g_virtual_screen, police, "Veux-tu rejouer contre l'I.A ?", couleurNoire, VIRTUAL_W / 2, 275);
+            draw_text_centered(police, "Veux-tu rejouer contre l'I.A ?", couleurNoire, VIRTUAL_W / 2, 275);
 
             // OUI / NON buttons centered in their clickable zones
-            SDL_Rect btn_oui = {199, 350, 86, 70};
-            draw_button_text(g_virtual_screen, police, " OUI ", couleurNoire, couleurindigo, btn_oui);
+            SDL_FRect btn_oui = {199.0f, 350.0f, 86.0f, 70.0f};
+            draw_button_text(police, " OUI ", couleurNoire, couleurindigo, btn_oui);
 
-            SDL_Rect btn_non = {500, 350, 105, 70};
-            draw_button_text(g_virtual_screen, police, " NON ", couleurNoire, couleurindigo, btn_non);
+            SDL_FRect btn_non = {500.0f, 350.0f, 105.0f, 70.0f};
+            draw_button_text(police, " NON ", couleurNoire, couleurindigo, btn_non);
 
             present_screen();
 
@@ -720,64 +720,67 @@ int main ( int argc, char* argv[] )
             continuer = 1;
             while(continuer)
             {
-                SDL_WaitEvent(&event);
+                if (!SDL_WaitEvent(&event)) break;
                 handle_window_events(&event);
 
                 switch(event.type)
                 {
-                case SDL_QUIT:
+                case SDL_EVENT_QUIT:
                     continuer = 0;
                     lasse = 1;
                     rejouer = 0;
                     break;
-                case SDL_MOUSEBUTTONUP:
-                    posiclic = transform_mouse_coords(event.button.x, event.button.y);
-                    if (posiclic.x >= 199 && posiclic.x <= 285 && posiclic.y >= 350 && posiclic.y <= 420)
+                case SDL_EVENT_MOUSE_BUTTON_UP:
+                    if (event.button.button == SDL_BUTTON_LEFT)
                     {
-                        rejouer = 1;
-                        vvict = 0;
-                        pplein = 0;
-                        a = 0; b = 0; c = 0; d = 0; e = 0; f = 0; g = 0; h = 0; i = 0;
-                        continuer = 0;
+                        posiclic = get_logical_mouse_coords(&event);
+                        if (posiclic.x >= 199 && posiclic.x <= 285 && posiclic.y >= 350 && posiclic.y <= 420)
+                        {
+                            rejouer = 1;
+                            vvict = 0;
+                            pplein = 0;
+                            a = 0; b = 0; c = 0; d = 0; e = 0; f = 0; g = 0; h = 0; i = 0;
+                            continuer = 0;
+                        }
+                        else if(posiclic.x >= 500 && posiclic.x <= 605 && posiclic.y >= 350 && posiclic.y <= 420)
+                        {
+                            rejouer = 0;
+                            continuer = 0;
+                        }
+                        else
+                            continuer = 1;
                     }
-                    else if(posiclic.x >= 500 && posiclic.x <= 605 && posiclic.y >= 350 && posiclic.y <= 420)
-                    {
-                        rejouer = 0;
-                        continuer = 0;
-                    }
-                    else
-                        continuer = 1;
+                    break;
+                default:
                     break;
                 }
             }
         }
     }
 
-    // Affichage des crédits.
-    // SDL_QUIT (clic sur la croix rouge) est seulement un signal logique : la fenêtre SDL reste
-    // physiquement valide jusqu'à ce que SDL_Quit() soit appelé explicitement.
-    // On peut donc toujours dessiner les crédits dans les deux cas (fermeture normale ou via la croix).
+    // Affichage des crédits de fin
     pause_screen();
 
-    // Sur Windows x64, SDL_Quit(), TTF_Quit() et même le simple "return 0" de main() déclenchent
-    // une chaîne de handlers atexit et de destructeurs C++ enregistrés par SDL 1.2 qui accèdent à
-    // des pointeurs de fonctions internes 32-bit invalides sous un processus 64-bit, provoquant
-    // une violation d'accès 0xC0000005.
-    //
-    // _exit(0) court-circuite TOUTE cette chaîne (pas de destructeurs, pas d'atexit, pas de
-    // SDL_Quit()) et demande directement au noyau Windows de terminer le processus.
-    //
-    //
-    // Sur Linux / macOS, SDL 1.2 fonctionne correctement en 64-bit : on fait un return normal.
-#if defined(_WIN32)
-    _exit(0);
-#else
-    if (icon) SDL_FreeSurface(icon);
-    if (g_virtual_screen) SDL_FreeSurface(g_virtual_screen);
+    // Clean resource deallocation
+    if (g_canvas)
+    {
+        SDL_DestroyTexture(g_canvas);
+        g_canvas = NULL;
+    }
+    if (g_renderer)
+    {
+        SDL_DestroyRenderer(g_renderer);
+        g_renderer = NULL;
+    }
+    if (g_window)
+    {
+        SDL_DestroyWindow(g_window);
+        g_window = NULL;
+    }
+
     TTF_Quit();
     SDL_Quit();
     return 0;
-#endif
 }
 
 void pause_screen()
@@ -787,19 +790,19 @@ void pause_screen()
 
     grille();
 
-    TTF_Font *p1 = TTF_OpenFont(get_asset_path("PatrickHand-Regular.ttf").c_str(), 44);
+    TTF_Font *p1 = TTF_OpenFont(get_asset_path("PatrickHand-Regular.ttf").c_str(), 44.0f);
     if (p1)
     {
-        SDL_Color couleurNoire = {0, 0, 0};
-        draw_text_centered(g_virtual_screen, p1, "Ce programme a été créé par :", couleurNoire, VIRTUAL_W / 2, 220);
+        SDL_Color couleurNoire = {0, 0, 0, 255};
+        draw_text_centered(p1, "Ce programme a été créé par :", couleurNoire, VIRTUAL_W / 2, 220);
         TTF_CloseFont(p1);
     }
 
-    TTF_Font *p2 = TTF_OpenFont(get_asset_path("Graduate-Regular.ttf").c_str(), 60);
+    TTF_Font *p2 = TTF_OpenFont(get_asset_path("Graduate-Regular.ttf").c_str(), 60.0f);
     if (p2)
     {
-        SDL_Color couleurNoire = {0, 0, 0};
-        draw_text_centered(g_virtual_screen, p2, "FromTheRags", couleurNoire, VIRTUAL_W / 2, 310);
+        SDL_Color couleurNoire = {0, 0, 0, 255};
+        draw_text_centered(p2, "FromTheRags", couleurNoire, VIRTUAL_W / 2, 310);
         TTF_CloseFont(p2);
     }
 
@@ -807,19 +810,20 @@ void pause_screen()
 
     // Flush any pending clicks from previous screen so credits stay visible
     SDL_Delay(250);
-    SDL_Event dummy;
-    while (SDL_PollEvent(&dummy)) {}
+    while (SDL_PollEvent(&event)) {}
 
     while (continuer)
     {
-        if (SDL_WaitEvent(&event) == 0) break;
+        if (!SDL_WaitEvent(&event)) break;
         handle_window_events(&event);
         switch(event.type)
         {
-        case SDL_QUIT:
-        case SDL_KEYDOWN:
-        case SDL_MOUSEBUTTONUP:
+        case SDL_EVENT_QUIT:
+        case SDL_EVENT_KEY_DOWN:
+        case SDL_EVENT_MOUSE_BUTTON_UP:
             continuer = 0;
+            break;
+        default:
             break;
         }
     }
@@ -827,51 +831,61 @@ void pause_screen()
 
 void affrond(int pcase)
 {
-    if (pcase <= 0 || !g_virtual_screen) return;
+    if (pcase <= 0 || !g_renderer || !g_canvas) return;
     SDL_Surface *rond = SDL_LoadBMP(get_asset_path("rond.bmp").c_str());
     if (!rond) return;
 
-    SDL_Rect posirond = {0, 0, (Uint16)rond->w, (Uint16)rond->h};
-    if(pcase == 9) { posirond.x = 498; posirond.y = 48; }
-    if(pcase == 8) { posirond.x = 269; posirond.y = 48; }
-    if(pcase == 7) { posirond.x = 40;  posirond.y = 48; }
-    if(pcase == 6) { posirond.x = 498; posirond.y = 275; }
-    if(pcase == 5) { posirond.x = 269; posirond.y = 275; }
-    if(pcase == 4) { posirond.x = 40;  posirond.y = 275; }
-    if(pcase == 3) { posirond.x = 498; posirond.y = 502; }
-    if(pcase == 2) { posirond.x = 269; posirond.y = 502; }
-    if(pcase == 1) { posirond.x = 40;  posirond.y = 502; }
+    SDL_SetSurfaceColorKey(rond, true, SDL_MapSurfaceRGB(rond, 255, 255, 255));
+    SDL_Texture *tex = SDL_CreateTextureFromSurface(g_renderer, rond);
+    if (tex)
+    {
+        SDL_FRect posirond = {0.0f, 0.0f, (float)rond->w, (float)rond->h};
+        if(pcase == 9) { posirond.x = 498.0f; posirond.y = 48.0f; }
+        if(pcase == 8) { posirond.x = 269.0f; posirond.y = 48.0f; }
+        if(pcase == 7) { posirond.x = 40.0f;  posirond.y = 48.0f; }
+        if(pcase == 6) { posirond.x = 498.0f; posirond.y = 275.0f; }
+        if(pcase == 5) { posirond.x = 269.0f; posirond.y = 275.0f; }
+        if(pcase == 4) { posirond.x = 40.0f;  posirond.y = 275.0f; }
+        if(pcase == 3) { posirond.x = 498.0f; posirond.y = 502.0f; }
+        if(pcase == 2) { posirond.x = 269.0f; posirond.y = 502.0f; }
+        if(pcase == 1) { posirond.x = 40.0f;  posirond.y = 502.0f; }
 
-    SDL_SetColorKey(rond, SDL_SRCCOLORKEY, SDL_MapRGB(rond->format, 255, 255, 255));
-    SDL_BlitSurface(rond, NULL, g_virtual_screen, &posirond);
+        SDL_RenderTexture(g_renderer, tex, NULL, &posirond);
+        SDL_DestroyTexture(tex);
+    }
+    SDL_DestroySurface(rond);
     present_screen();
-    SDL_FreeSurface(rond);
 }
 
 void affcroix(int pcase)
 {
-    if (pcase <= 0 || !g_virtual_screen) return;
+    if (pcase <= 0 || !g_renderer || !g_canvas) return;
     SDL_Surface *croix = SDL_LoadBMP(get_asset_path("croix.bmp").c_str());
     if (!croix) return;
 
-    SDL_Rect posicroix = {0, 0, (Uint16)croix->w, (Uint16)croix->h};
-    if(pcase == 9) { posicroix.x = 498; posicroix.y = 48; }
-    if(pcase == 8) { posicroix.x = 269; posicroix.y = 48; }
-    if(pcase == 7) { posicroix.x = 40;  posicroix.y = 48; }
-    if(pcase == 6) { posicroix.x = 498; posicroix.y = 275; }
-    if(pcase == 5) { posicroix.x = 269; posicroix.y = 275; }
-    if(pcase == 4) { posicroix.x = 40;  posicroix.y = 275; }
-    if(pcase == 3) { posicroix.x = 498; posicroix.y = 502; }
-    if(pcase == 2) { posicroix.x = 269; posicroix.y = 502; }
-    if(pcase == 1) { posicroix.x = 40;  posicroix.y = 502; }
+    SDL_SetSurfaceColorKey(croix, true, SDL_MapSurfaceRGB(croix, 255, 255, 255));
+    SDL_Texture *tex = SDL_CreateTextureFromSurface(g_renderer, croix);
+    if (tex)
+    {
+        SDL_FRect posicroix = {0.0f, 0.0f, (float)croix->w, (float)croix->h};
+        if(pcase == 9) { posicroix.x = 498.0f; posicroix.y = 48.0f; }
+        if(pcase == 8) { posicroix.x = 269.0f; posicroix.y = 48.0f; }
+        if(pcase == 7) { posicroix.x = 40.0f;  posicroix.y = 48.0f; }
+        if(pcase == 6) { posicroix.x = 498.0f; posicroix.y = 275.0f; }
+        if(pcase == 5) { posicroix.x = 269.0f; posicroix.y = 275.0f; }
+        if(pcase == 4) { posicroix.x = 40.0f;  posicroix.y = 275.0f; }
+        if(pcase == 3) { posicroix.x = 498.0f; posicroix.y = 502.0f; }
+        if(pcase == 2) { posicroix.x = 269.0f; posicroix.y = 502.0f; }
+        if(pcase == 1) { posicroix.x = 40.0f;  posicroix.y = 502.0f; }
 
-    SDL_SetColorKey(croix, SDL_SRCCOLORKEY, SDL_MapRGB(croix->format, 255, 255, 255));
-    SDL_BlitSurface(croix, NULL, g_virtual_screen, &posicroix);
+        SDL_RenderTexture(g_renderer, tex, NULL, &posicroix);
+        SDL_DestroyTexture(tex);
+    }
+    SDL_DestroySurface(croix);
     present_screen();
-    SDL_FreeSurface(croix);
 }
 
-int coordonnees(SDL_Rect posiclic)
+int coordonnees(SDL_Point2D posiclic)
 {
     if(posiclic.x >= 498 && posiclic.x <= 710 && posiclic.y >= 48 && posiclic.y <= 260) return 9;
     if(posiclic.x >= 269 && posiclic.x <= 481 && posiclic.y >= 48 && posiclic.y <= 260) return 8;
@@ -975,17 +989,22 @@ int plein(int a, int b, int c, int d, int e, int f, int g, int h, int i)
 
 void grille()
 {
+    if (!g_renderer || !g_canvas) return;
     SDL_Surface *imagedefond = SDL_LoadBMP(get_asset_path("grille.bmp").c_str());
-    if (imagedefond && g_virtual_screen)
+    if (imagedefond)
     {
-        SDL_Rect image = {0, 0, (Uint16)imagedefond->w, (Uint16)imagedefond->h};
-        SDL_BlitSurface(imagedefond, NULL, g_virtual_screen, &image);
-        SDL_FreeSurface(imagedefond);
+        SDL_Texture *tex = SDL_CreateTextureFromSurface(g_renderer, imagedefond);
+        if (tex)
+        {
+            SDL_RenderTexture(g_renderer, tex, NULL, NULL);
+            SDL_DestroyTexture(tex);
+        }
+        SDL_DestroySurface(imagedefond);
     }
     present_screen();
 }
 
-int choixniveau(SDL_Rect posiclic)
+int choixniveau(SDL_Point2D posiclic)
 {
     if(posiclic.x >= 120 && posiclic.x <= 418 && posiclic.y >= 350 && posiclic.y <= 417) return 1;
     if(posiclic.x >= 454 && posiclic.x <= 718 && posiclic.y >= 350 && posiclic.y <= 417) return 2;
@@ -997,12 +1016,17 @@ int choixniveau(SDL_Rect posiclic)
 
 void nice()
 {
+    if (!g_renderer || !g_canvas) return;
     SDL_Surface *imagedefond = SDL_LoadBMP(get_asset_path("nice.bmp").c_str());
-    if (imagedefond && g_virtual_screen)
+    if (imagedefond)
     {
-        SDL_Rect image = {0, 0, (Uint16)imagedefond->w, (Uint16)imagedefond->h};
-        SDL_BlitSurface(imagedefond, NULL, g_virtual_screen, &image);
-        SDL_FreeSurface(imagedefond);
+        SDL_Texture *tex = SDL_CreateTextureFromSurface(g_renderer, imagedefond);
+        if (tex)
+        {
+            SDL_RenderTexture(g_renderer, tex, NULL, NULL);
+            SDL_DestroyTexture(tex);
+        }
+        SDL_DestroySurface(imagedefond);
     }
     present_screen();
 }

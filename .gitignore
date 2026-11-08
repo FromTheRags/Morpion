@@ -5,6 +5,7 @@ obj/
 out/
 cmake-build-*/
 .cache/
+cmake/sdl3/
 
 # Executables and compiled objects
 *.exe
